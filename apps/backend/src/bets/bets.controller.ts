@@ -1,0 +1,4 @@
+import {Body,Controller,Headers,Post} from '@nestjs/common'; import {JwtService} from '@nestjs/jwt'; import {BetsService} from './bets.service';
+@Controller('bets') export class BetsController{constructor(private s:BetsService,private j:JwtService){} private uid(h:string){return this.j.verify(h.replace('Bearer ',{ } as any),{secret:process.env.JWT_SECRET||'change-me-in-development'}).sub}
+ @Post() place(@Headers('authorization')h:string,@Body()b:{roundId:string,stake:number}){const t=h.replace('Bearer ','');const u=this.j.verify(t,{secret:process.env.JWT_SECRET||'change-me-in-development'}).sub;return this.s.place(u,b.roundId,Number(b.stake))}
+ @Post('cashout') cash(@Headers('authorization')h:string,@Body()b:{betId:string,multiplier:number}){const t=h.replace('Bearer ','');const u=this.j.verify(t,{secret:process.env.JWT_SECRET||'change-me-in-development'}).sub;return this.s.cashout(u,b.betId,Number(b.multiplier))}}

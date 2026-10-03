@@ -1,0 +1,2 @@
+import {Module} from '@nestjs/common'; import {UsersController} from './users.controller'; import {PrismaService} from '../common/prisma.service'; import {AuthModule} from '../auth/auth.module'; import {JwtModule} from '@nestjs/jwt';
+@Module({imports:[AuthModule,JwtModule.register({secret:process.env.JWT_SECRET||'change-me-in-development'})],controllers:[UsersController],providers:[PrismaService]}) export class UsersModule{}

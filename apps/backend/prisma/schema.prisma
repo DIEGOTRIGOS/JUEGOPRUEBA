@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum BetStatus {
+  OPEN
+  CASHED_OUT
+  LOST
+}
+
+enum RoundStatus {
+  WAITING
+  RUNNING
+  CRASHED
+}
+
+enum LedgerType {
+  DEMO_GRANT
+  BET
+  CASHOUT
+  REFUND
+}
+
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  name         String
+  role         UserRole    @default(USER)
+  demoBalance  Decimal     @default(100000) @db.Decimal(18,2)
+  createdAt    DateTime    @default(now())
+  bets         Bet[]
+  ledger       LedgerEntry[]
+}
+
+model GameRound {
+  id              String      @id @default(cuid())
+  sequence        Int         @unique
+  status          RoundStatus @default(WAITING)
+  crashMultiplier Decimal?    @db.Decimal(10,2)
+  serverSeedHash  String
+  serverSeed      String
+  clientSeed      String
+  nonce           Int
+  startedAt       DateTime?
+  crashedAt       DateTime?
+  createdAt       DateTime    @default(now())
+  bets            Bet[]
+}
+
+model Bet {
+  id            String     @id @default(cuid())
+  userId        String
+  roundId       String
+  stake         Decimal    @db.Decimal(18,2)
+  cashoutAt     Decimal?   @db.Decimal(10,2)
+  payout        Decimal?   @db.Decimal(18,2)
+  status        BetStatus  @default(OPEN)
+  createdAt     DateTime   @default(now())
+  user          User       @relation(fields:[userId], references:[id])
+  round         GameRound  @relation(fields:[roundId], references:[id])
+}
+
+model LedgerEntry {
+  id        String      @id @default(cuid())
+  userId    String
+  type      LedgerType
+  amount    Decimal     @db.Decimal(18,2)
+  reference String
+  createdAt DateTime    @default(now())
+  user      User        @relation(fields:[userId], references:[id])
+}

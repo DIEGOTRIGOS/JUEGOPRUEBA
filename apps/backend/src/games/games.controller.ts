@@ -1,0 +1,1 @@
+import {Controller,Get} from '@nestjs/common'; import {GameService} from './game.service'; @Controller('games') export class GamesController{constructor(private s:GameService){} @Get('history') history(){return this.s.history()}}

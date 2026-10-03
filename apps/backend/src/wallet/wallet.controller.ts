@@ -1,0 +1,2 @@
+import {Controller,Get,Headers} from '@nestjs/common'; import {JwtService} from '@nestjs/jwt'; import {PrismaService} from '../common/prisma.service';
+@Controller('wallet') export class WalletController{constructor(private p:PrismaService,private j:JwtService){} @Get() async get(@Headers('authorization')h:string){const t=h.replace('Bearer ','');const u=this.j.verify(t,{secret:process.env.JWT_SECRET||'change-me-in-development'}).sub;return this.p.user.findUnique({where:{id:u},select:{demoBalance:true,ledger:true}})}}
