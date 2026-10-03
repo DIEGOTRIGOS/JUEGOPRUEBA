@@ -1,4 +1,30 @@
-import {Body,Controller,Headers,Post} from '@nestjs/common'; import {JwtService} from '@nestjs/jwt'; import {BetsService} from './bets.service';
-@Controller('bets') export class BetsController{constructor(private s:BetsService,private j:JwtService){} private uid(h:string){return this.j.verify(h.replace('Bearer ',{ } as any),{secret:process.env.JWT_SECRET||'change-me-in-development'}).sub}
- @Post() place(@Headers('authorization')h:string,@Body()b:{roundId:string,stake:number}){const t=h.replace('Bearer ','');const u=this.j.verify(t,{secret:process.env.JWT_SECRET||'change-me-in-development'}).sub;return this.s.place(u,b.roundId,Number(b.stake))}
- @Post('cashout') cash(@Headers('authorization')h:string,@Body()b:{betId:string,multiplier:number}){const t=h.replace('Bearer ','');const u=this.j.verify(t,{secret:process.env.JWT_SECRET||'change-me-in-development'}).sub;return this.s.cashout(u,b.betId,Number(b.multiplier))}}
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { AuthenticatedUser, BearerAuthGuard } from '../common/auth.guards';
+import { BetsService } from './bets.service';
+
+@Controller('bets')
+@UseGuards(BearerAuthGuard)
+export class BetsController {
+  constructor(private readonly bets: BetsService) {}
+
+  @Post()
+  place(
+    @Req() request: { authUser: AuthenticatedUser },
+    @Body() body: { roundId: string; stake: number },
+  ) {
+    return this.bets.place(request.authUser.id, body.roundId, Number(body.stake));
+  }
+
+  @Post('cashout')
+  cashout(
+    @Req() request: { authUser: AuthenticatedUser },
+    @Body() body: { betId: string; multiplier: number },
+  ) {
+    return this.bets.cashout(request.authUser.id, body.betId, Number(body.multiplier));
+  }
+
+  @Get('history')
+  history(@Req() request: { authUser: AuthenticatedUser }) {
+    return this.bets.history(request.authUser.id);
+  }
+}

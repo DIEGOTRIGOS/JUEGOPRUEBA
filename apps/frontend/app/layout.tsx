@@ -1,8 +1,8 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'SkyRush — Demo de vuelo',
-  description: 'Simulador de juego crash con créditos ficticios y rondas en tiempo real.',
+  title: 'SkyRush — Vuelo en tiempo real',
+  description: 'Juego de cohete crash en tiempo real con créditos de práctica.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

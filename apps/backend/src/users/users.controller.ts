@@ -1,2 +1,17 @@
-import {Controller,Get,Headers,UnauthorizedException} from '@nestjs/common'; import {JwtService} from '@nestjs/jwt'; import {PrismaService} from '../common/prisma.service';
-@Controller('users') export class UsersController{constructor(private p:PrismaService,private j:JwtService){} @Get('me') async me(@Headers('authorization') h:string){if(!h)throw new UnauthorizedException();const t=h.replace('Bearer ','');const x=this.j.verify(t,{secret:process.env.JWT_SECRET||'change-me-in-development'});return this.p.user.findUnique({where:{id:x.sub},select:{id:true,email:true,name:true,role:true,demoBalance:true}})}}
+import { Controller, Get, Req, UseGuards } from '@nestjs/common';
+import { AuthenticatedUser, BearerAuthGuard } from '../common/auth.guards';
+import { PrismaService } from '../common/prisma.service';
+
+@Controller('users')
+@UseGuards(BearerAuthGuard)
+export class UsersController {
+  constructor(private readonly prisma: PrismaService) {}
+
+  @Get('me')
+  me(@Req() request: { authUser: AuthenticatedUser }) {
+    return this.prisma.user.findUnique({
+      where: { id: request.authUser.id },
+      select: { id: true, email: true, name: true, role: true, demoBalance: true },
+    });
+  }
+}

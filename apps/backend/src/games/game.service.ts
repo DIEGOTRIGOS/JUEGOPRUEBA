@@ -11,9 +11,10 @@ type RoundState = {
   serverSeed: string;
   clientSeed: string;
   nonce: number;
+  crashMultiplier?: number;
 };
 
-const BETTING_SECONDS = 5;
+const BETTING_SECONDS = 60;
 const TICK_MS = 100;
 const NEXT_ROUND_DELAY_MS = 1200;
 
@@ -23,11 +24,27 @@ export class GameService implements OnModuleInit {
   private currentRound: RoundState | null = null;
   private currentMultiplier = 1;
   private sequence = 0;
+  private bettingEndsAt = 0;
 
   constructor(private readonly prisma: PrismaService) {}
 
   attach(io: Server) {
     this.io = io;
+  }
+
+  snapshot() {
+    if (!this.currentRound) return null;
+    return {
+      id: this.currentRound.id,
+      sequence: this.currentRound.sequence,
+      status: this.currentRound.status,
+      serverSeedHash: this.currentRound.serverSeedHash,
+      seconds: this.currentRound.status === 'WAITING'
+        ? Math.max(0, Math.ceil((this.bettingEndsAt - Date.now()) / 1000))
+        : 0,
+      multiplier: this.currentMultiplier,
+      crashMultiplier: this.currentRound.crashMultiplier,
+    };
   }
 
   async onModuleInit() {
@@ -87,6 +104,7 @@ export class GameService implements OnModuleInit {
   }
 
   private async openBetting(round: RoundState) {
+    this.bettingEndsAt = Date.now() + BETTING_SECONDS * 1000;
     for (let seconds = BETTING_SECONDS; seconds > 0; seconds -= 1) {
       const event = seconds === BETTING_SECONDS ? 'round:waiting' : 'round:countdown';
       this.io?.emit(event, {
@@ -146,6 +164,7 @@ export class GameService implements OnModuleInit {
       where: { roundId: round.id, status: 'OPEN' },
       data: { status: 'LOST' },
     });
+    this.currentRound = { ...round, status: 'CRASHED', crashMultiplier };
     this.io?.emit('round:crash', {
       id: round.id,
       sequence: round.sequence,

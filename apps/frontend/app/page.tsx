@@ -5,6 +5,9 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 
 import { io, Socket } from 'socket.io-client';
+import AdminPanel from './admin-panel';
+import AccountPanel from './account-panel';
+import CreditRefillModal from './credit-refill-modal';
 
 
 
@@ -68,9 +71,25 @@ type Bet = {
 
   payout?: string | number;
 
+  cashoutAt?: string | number | null;
+
+  createdAt?: string;
+
+  round?: { id: string; sequence: number; status: string; crashMultiplier?: number | string | null };
+
 };
 
 
+
+type LedgerEntry = {
+  id: string;
+  type: string;
+  amount: number | string;
+  reference: string;
+  createdAt: string;
+};
+
+type AuthMode = 'login' | 'register';
 
 type IconName = 'rocket' | 'wallet' | 'history' | 'shield' | 'plus' | 'minus' | 'bolt' | 'radio' | 'clock' | 'logout' | 'spark' | 'chevron' | 'check' | 'copy';
 
@@ -174,17 +193,32 @@ function formatCredits(value: number | string) {
 
 }
 
+function formatCountdown(value: number) {
+  const safeSeconds = Math.max(0, Math.floor(value));
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
 
 
-function LoginScreen({ email, password, setEmail, setPassword, onLogin, busy, message }: {
+
+function LoginScreen({ email, password, name, mode, setEmail, setPassword, setName, setMode, onLogin, busy, message }: {
 
   email: string;
 
   password: string;
 
+  name: string;
+
+  mode: AuthMode;
+
   setEmail: (value: string) => void;
 
   setPassword: (value: string) => void;
+
+  setName: (value: string) => void;
+
+  setMode: (value: AuthMode) => void;
 
   onLogin: (event: FormEvent<HTMLFormElement>) => void;
 
@@ -196,7 +230,7 @@ function LoginScreen({ email, password, setEmail, setPassword, onLogin, busy, me
 
   return <main className="app-shell login-shell" id="inicio">
 
-    <header className="topbar login-topbar"><Wordmark/><div className="topbar-right"><span className="demo-tag"><span className="demo-tag-dot"/>MODO DEMO</span><span className="topbar-caption">Vuela con créditos ficticios</span></div></header>
+    <header className="topbar login-topbar"><Wordmark/><div className="topbar-right"><span className="demo-tag"><span className="demo-tag-dot"/>SIMULADOR EN VIVO</span><span className="topbar-caption">Vuela con créditos ficticios</span></div></header>
 
     <section className="login-layout">
 
@@ -232,13 +266,15 @@ function LoginScreen({ email, password, setEmail, setPassword, onLogin, busy, me
 
       <section className="auth-card" aria-labelledby="login-title">
 
-        <div className="auth-card-top"><span className="auth-icon"><Icon name="rocket" size={21}/></span><span className="auth-card-kicker">TU CABINA TE ESPERA</span></div>
+        <div className="auth-card-top"><span className="auth-icon"><Icon name="rocket" size={21}/></span><span className="auth-card-kicker">{mode === 'register' ? 'EMPIEZA TU RECORRIDO' : 'TU CABINA TE ESPERA'}</span></div>
 
-        <h2 id="login-title">Despega ahora</h2>
+        <h2 id="login-title">{mode === 'register' ? 'Crea tu cuenta' : 'Despega ahora'}</h2>
 
-        <p className="auth-intro">Entra a tu cuenta demo para unirte al próximo vuelo.</p>
+        <p className="auth-intro">{mode === 'register' ? 'Configura tu perfil y recibe créditos de práctica para comenzar.' : 'Ingresa a tu cuenta para unirte al próximo vuelo.'}</p>
 
         <form className="auth-form" onSubmit={onLogin}>
+
+          {mode === 'register' && <><label htmlFor="name">Nombre</label><div className="field-wrap"><span className="field-symbol">✦</span><input id="name" className="text-field" type="text" autoComplete="name" maxLength={60} value={name} onChange={event => setName(event.target.value)} required/></div></>}
 
           <label htmlFor="email">Correo electrónico</label>
 
@@ -246,19 +282,19 @@ function LoginScreen({ email, password, setEmail, setPassword, onLogin, busy, me
 
           <label htmlFor="password">Contraseña</label>
 
-          <div className="field-wrap"><span className="field-symbol field-lock"><Icon name="shield" size={16}/></span><input id="password" className="text-field" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required/></div>
+          <div className="field-wrap"><span className="field-symbol field-lock"><Icon name="shield" size={16}/></span><input id="password" className="text-field" type="password" autoComplete={mode === 'register' ? 'new-password' : 'current-password'} minLength={8} value={password} onChange={event => setPassword(event.target.value)} required/></div>
 
           {message && <div className="inline-message" role="alert">{message}</div>}
 
-          <button className="button button-primary auth-submit" type="submit" disabled={busy}><span>{busy ? 'Conectando…' : 'Entrar a la cabina'}</span><span className="button-arrow">↗</span></button>
+          <button className="button button-primary auth-submit" type="submit" disabled={busy}><span>{busy ? 'Conectando…' : mode === 'register' ? 'Crear cuenta y entrar' : 'Entrar a la cabina'}</span><span className="button-arrow">↗</span></button>
 
         </form>
 
-        <div className="auth-divider"><span/>ACCESO DE PRUEBA<span/></div>
+        <button className="auth-mode-toggle" type="button" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>
+          {mode === 'register' ? '¿Ya tienes una cuenta? Inicia sesión' : '¿Primera vez aquí? Crea una cuenta'}
+        </button>
 
-        <div className="demo-credentials"><span className="demo-credentials-icon"><Icon name="spark" size={16}/></span><div><b>Cuenta demo lista</b><span>demo@example.com <i>·</i> Demo1234!</span></div><Icon name="check" size={17}/></div>
-
-        <p className="auth-footnote">Sin depósitos ni dinero real. Este prototipo utiliza exclusivamente créditos ficticios.</p>
+        <p className="auth-footnote">Créditos de práctica sin valor monetario. No se realizan depósitos ni retiros.</p>
 
       </section>
 
@@ -276,9 +312,13 @@ export default function Home() {
 
   const [token, setToken] = useState('');
 
-  const [email, setEmail] = useState('demo@example.com');
+  const [email, setEmail] = useState('');
 
-  const [password, setPassword] = useState('Demo1234!');
+  const [password, setPassword] = useState('');
+
+  const [name, setName] = useState('');
+
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
 
   const [user, setUser] = useState<DemoUser | null>(null);
 
@@ -286,7 +326,7 @@ export default function Home() {
 
   const [multiplier, setMultiplier] = useState(1);
 
-  const [countdown, setCountdown] = useState(5);
+  const [countdown, setCountdown] = useState(60);
 
   const [stake, setStake] = useState(1000);
 
@@ -299,6 +339,16 @@ export default function Home() {
   const [socketStatus, setSocketStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
 
   const [busy, setBusy] = useState(false);
+
+  const [accountBusy, setAccountBusy] = useState(false);
+
+  const [activeView, setActiveView] = useState<'game' | 'account' | 'admin'>('game');
+
+  const [ledger, setLedger] = useState<LedgerEntry[]>([]);
+
+  const [betHistory, setBetHistory] = useState<Bet[]>([]);
+  const [refillOpen, setRefillOpen] = useState(false);
+  const [refillMessage, setRefillMessage] = useState('');
 
 
 
@@ -318,6 +368,46 @@ export default function Home() {
 
 
 
+  async function syncAccount(session = token) {
+    if (!session) return;
+    const headers = { authorization: `Bearer ${session}` };
+    const [profileResponse, walletResponse, betsResponse] = await Promise.all([
+      fetch(`${API}/users/me`, { headers }),
+      fetch(`${API}/wallet`, { headers }),
+      fetch(`${API}/bets/history`, { headers }),
+    ]);
+    if (!profileResponse.ok || !walletResponse.ok || !betsResponse.ok) {
+      throw new Error('No se pudo actualizar la cuenta. Vuelve a iniciar sesión.');
+    }
+    const [profile, wallet, bets] = await Promise.all([
+      profileResponse.json(), walletResponse.json(), betsResponse.json(),
+    ]);
+    setUser({ ...profile, demoBalance: wallet.demoBalance });
+    setLedger(Array.isArray(wallet.ledger) ? wallet.ledger : []);
+    setBetHistory(Array.isArray(bets) ? bets : []);
+    const activeBet = Array.isArray(bets) ? bets.find((item: Bet) => item.status === 'OPEN') : null;
+    if (activeBet) setBet(activeBet);
+  }
+
+  useEffect(() => {
+    const savedSession = window.sessionStorage.getItem('skyrush-session');
+    if (!savedSession) return;
+    setToken(savedSession);
+    void fetch(`${API}/users/me`, { headers: { authorization: `Bearer ${savedSession}` } })
+      .then(async response => response.ok ? response.json() : null)
+      .then(profile => {
+        if (profile) setUser(profile);
+        else {
+          window.sessionStorage.removeItem('skyrush-session');
+          setToken('');
+        }
+      })
+      .catch(() => {
+        window.sessionStorage.removeItem('skyrush-session');
+        setToken('');
+      });
+  }, []);
+
   async function login(event: FormEvent<HTMLFormElement>) {
 
     event.preventDefault();
@@ -328,13 +418,13 @@ export default function Home() {
 
     try {
 
-      const response = await fetch(`${API}/auth/login`, {
+      const response = await fetch(`${API}/auth/${authMode === 'register' ? 'register' : 'login'}`, {
 
         method: 'POST',
 
         headers: { 'content-type': 'application/json' },
 
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(authMode === 'register' ? { name, email, password } : { email, password }),
 
       });
 
@@ -342,15 +432,17 @@ export default function Home() {
 
       if (!response.ok) {
 
-        setMessage(data.message || 'No pudimos iniciar sesión. Revisa tus datos.');
+        setMessage(data.message || (authMode === 'register' ? 'No pudimos crear la cuenta.' : 'No pudimos iniciar sesión. Revisa tus datos.'));
 
         return;
 
       }
 
+      window.sessionStorage.setItem('skyrush-session', data.accessToken);
       setToken(data.accessToken);
 
       setUser(data.user);
+      setActiveView('game');
 
     } catch {
 
@@ -371,6 +463,10 @@ export default function Home() {
     if (!token) return;
 
     let active = true;
+
+    void syncAccount(token).catch(error => {
+      if (active) setMessage(error instanceof Error ? error.message : 'No se pudo cargar tu cuenta.');
+    });
 
     fetch(`${API}/games/history`).then(response => response.json()).then(data => {
 
@@ -394,11 +490,17 @@ export default function Home() {
 
     socket.on('connect_error', () => setSocketStatus('disconnected'));
 
+    socket.on('round:snapshot', (data: Round) => {
+      setRound(data);
+      setCountdown(data.seconds ?? 0);
+      setMultiplier(Number(data.multiplier ?? 1));
+    });
+
     socket.on('round:waiting', (data: Round) => {
 
       setRound({ ...data, status: 'WAITING' });
 
-      setCountdown(data.seconds ?? 5);
+      setCountdown(data.seconds ?? 60);
 
       setMultiplier(1);
 
@@ -452,6 +554,8 @@ export default function Home() {
 
       }).catch(() => undefined);
 
+      void syncAccount(token).catch(() => undefined);
+
     });
 
 
@@ -494,19 +598,25 @@ export default function Home() {
 
         setMessage(data.message || 'No se pudo registrar la apuesta.');
 
+        void syncAccount(token).catch(() => undefined);
+
         return;
 
       }
 
-      setBet(data);
+      setBet(data.bet);
 
-      setUser(current => current ? { ...current, demoBalance: balance - stake } : current);
+      setUser(current => current ? { ...current, demoBalance: data.demoBalance } : current);
+
+      void syncAccount(token).catch(() => undefined);
 
       setMessage('Apuesta lista. El despegue es automático al terminar el contador.');
 
     } catch {
 
-      setMessage('No se pudo conectar con el servidor.');
+      void syncAccount(token).catch(() => undefined);
+
+      setMessage('No se pudo confirmar la apuesta; estamos actualizando el saldo desde el servidor.');
 
     } finally {
 
@@ -544,19 +654,25 @@ export default function Home() {
 
         setMessage(data.message || 'No se pudo retirar la apuesta.');
 
+        void syncAccount(token).catch(() => undefined);
+
         return;
 
       }
 
-      setUser(current => current ? { ...current, demoBalance: balance + Number(data.payout) } : current);
+      setUser(current => current ? { ...current, demoBalance: data.demoBalance } : current);
 
       setBet(current => current ? { ...current, status: 'CASHED_OUT', payout: data.payout } : current);
+
+      void syncAccount(token).catch(() => undefined);
 
       setMessage(`Retiro confirmado: ${formatCredits(data.payout)} créditos demo.`);
 
     } catch {
 
-      setMessage('No se pudo conectar con el servidor.');
+      void syncAccount(token).catch(() => undefined);
+
+      setMessage('No se pudo confirmar el retiro; estamos actualizando el saldo desde el servidor.');
 
     } finally {
 
@@ -570,6 +686,8 @@ export default function Home() {
 
   function logout() {
 
+    window.sessionStorage.removeItem('skyrush-session');
+
     setToken('');
 
     setUser(null);
@@ -580,14 +698,61 @@ export default function Home() {
 
     setMessage('');
 
+    setLedger([]);
+
+    setBetHistory([]);
+
+    setActiveView('game');
+
+  }
+
+  function openRefill() {
+    setRefillMessage('');
+    setRefillOpen(true);
+  }
+
+  async function refillCredits(amount: number) {
+    if (!token || accountBusy) return;
+    if (!Number.isFinite(amount) || amount < 1 || amount > 1000000 || Math.round(amount * 100) !== amount * 100 || balance + amount > 100000000) {
+      setRefillMessage('Elige una cantidad válida para tu saldo disponible.');
+      return;
+    }
+    setAccountBusy(true);
+    setRefillMessage('');
+    try {
+      const response = await fetch(`${API}/wallet/demo-credit`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ amount }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'No se pudieron añadir créditos.');
+      setUser(current => current ? { ...current, demoBalance: data.demoBalance } : current);
+      setRefillOpen(false);
+      setMessage(`Se añadieron ${formatCredits(data.amount)} créditos de práctica.`);
+      void syncAccount(token).catch(() => undefined);
+    } catch (error) {
+      void syncAccount(token).catch(() => undefined);
+      setRefillMessage(error instanceof Error ? error.message : 'No se pudieron añadir créditos.');
+    } finally {
+      setAccountBusy(false);
+    }
   }
 
 
 
   if (!loggedIn) {
 
-    return <LoginScreen email={email} password={password} setEmail={setEmail} setPassword={setPassword} onLogin={login} busy={busy} message={message}/>;
+    return <LoginScreen email={email} password={password} name={name} mode={authMode} setEmail={setEmail} setPassword={setPassword} setName={setName} setMode={setAuthMode} onLogin={login} busy={busy} message={message}/>;
 
+  }
+
+  if (activeView === 'admin' && user?.role === 'ADMIN') {
+    return <AdminPanel token={token} currentUser={user} onBack={() => setActiveView('game')} onLogout={logout}/>;
+  }
+
+  if (activeView === 'account') {
+    return <><AccountPanel user={user} balance={balance} ledger={ledger} bets={betHistory} busy={accountBusy} message={message} onOpenRefill={openRefill} onBack={() => setActiveView('game')} onLogout={logout}/>{refillOpen && <CreditRefillModal balance={balance} busy={accountBusy} error={refillMessage} onClose={() => setRefillOpen(false)} onSubmit={refillCredits}/>}</>;
   }
 
 
@@ -636,11 +801,25 @@ export default function Home() {
 
     </a>
 
+    <button className="nav-link nav-link-button" type="button" onClick={() => setActiveView('account')}>
+      <Icon name="wallet" size={16}/>
+      Mi cuenta
+    </button>
+
+    {user?.role === 'ADMIN' && <button className="nav-link nav-link-button" type="button" onClick={() => setActiveView('admin')}>
+      <Icon name="shield" size={16}/>
+      Administración
+    </button>}
+
   </nav>
 
 
 
   <div className="account-area">
+
+    <button className="wallet-refill-button" type="button" onClick={openRefill} disabled={accountBusy || balance >= 100000000} title="Elige la cantidad de créditos de práctica que quieres añadir">
+      <Icon name="plus" size={15}/>{accountBusy ? 'Actualizando…' : 'Recargar'}
+    </button>
 
     <div className="balance-pill">
 
@@ -764,13 +943,13 @@ export default function Home() {
 
             <div className={`flight-rocket ${round?.status === 'CRASHED' ? 'flight-rocket-crashed' : ''}`} style={{ left: `${Math.min(88, 7 + progress * .8)}%`, top: `${Math.max(18, 78 - progress * .58)}%` }}><span className="rocket-aura"/><RocketArt small/></div>
 
-            <div className="multiplier-display"><div className="multiplier-overline"><span className="multiplier-pulse"/>{round?.status === 'CRASHED' ? 'VUELO FINALIZADO' : running ? 'EL COHETE SIGUE SUBIENDO' : bettingOpen ? 'DESPEGUE AUTOMÁTICO EN' : socketStatus === 'connected' ? 'PREPARANDO DESPEGUE' : 'ESPERANDO CONEXIÓN'}</div><div className={`multiplier-number ${multiplierTone} ${bettingOpen ? 'multiplier-countdown' : ''}`}>{bettingOpen ? `00:${String(countdown).padStart(2, '0')}` : multiplier.toFixed(2)}<span>{bettingOpen ? 's' : '×'}</span></div><div className="multiplier-caption">{round?.status === 'CRASHED' ? 'El próximo vuelo despega pronto' : running ? 'Retira antes de que termine el vuelo' : bettingOpen ? betOpen ? 'Apuesta lista · el cohete despega solo' : 'Ventana abierta: confirma tu apuesta antes del despegue' : 'Prepara tu apuesta para el próximo vuelo'}</div></div>
+            <div className="multiplier-display"><div className="multiplier-overline"><span className="multiplier-pulse"/>{round?.status === 'CRASHED' ? 'VUELO FINALIZADO' : running ? 'EL COHETE SIGUE SUBIENDO' : bettingOpen ? 'DESPEGUE AUTOMÁTICO EN' : socketStatus === 'connected' ? 'PREPARANDO DESPEGUE' : 'ESPERANDO CONEXIÓN'}</div><div className={`multiplier-number ${multiplierTone} ${bettingOpen ? 'multiplier-countdown' : ''}`}>{bettingOpen ? formatCountdown(countdown) : multiplier.toFixed(2)}<span>{bettingOpen ? '' : '×'}</span></div><div className="multiplier-caption">{round?.status === 'CRASHED' ? 'El próximo vuelo despega pronto' : running ? 'Retira antes de que termine el vuelo' : bettingOpen ? betOpen ? 'Apuesta lista · el cohete despega solo' : 'Ventana abierta: confirma tu apuesta antes del despegue' : 'Prepara tu apuesta para el próximo vuelo'}</div></div>
 
             <div className="surface-bottom-fade"/>
 
           </div>
 
-          <div className="flight-card-foot"><div className="flight-foot-label"><span className={`status-icon ${running || bettingOpen ? 'status-icon-live' : ''}`}><Icon name={running ? 'bolt' : 'clock'} size={14}/></span><span>{running ? 'Vuelo en curso' : round?.status === 'CRASHED' ? 'Fin de vuelo' : bettingOpen ? `Apuestas abiertas · despega en ${countdown}s` : 'Plataforma en espera'}</span></div><span className="flight-foot-tip"><Icon name="spark" size={14}/> Todo se juega con saldo demo</span></div>
+          <div className="flight-card-foot"><div className="flight-foot-label"><span className={`status-icon ${running || bettingOpen ? 'status-icon-live' : ''}`}><Icon name={running ? 'bolt' : 'clock'} size={14}/></span><span>{running ? 'Vuelo en curso' : round?.status === 'CRASHED' ? 'Fin de vuelo' : bettingOpen ? `Apuestas abiertas · despega en ${formatCountdown(countdown)}` : 'Plataforma en espera'}</span></div><span className="flight-foot-tip"><Icon name="spark" size={14}/> Todo se juega con saldo demo</span></div>
 
         </div>
 
@@ -796,17 +975,19 @@ export default function Home() {
 
         <section className="bet-card"><div className="bet-card-head"><div><div className="eyebrow"><span className="eyebrow-line"/>TU MISIÓN</div><h2>Configura tu vuelo</h2></div><span className="bet-card-icon"><Icon name="rocket" size={20}/></span></div>
 
-          <div className="bet-status-strip"><span className={`bet-status-light ${running || bettingOpen ? 'bet-status-light-live' : ''}`}/><span>{betOpen && bettingOpen ? `Apuesta lista · despega en ${countdown}s` : running ? betOpen ? 'Vuelo activo · apuesta en juego' : 'Vuelo activo · apuestas cerradas' : round?.status === 'CRASHED' ? 'Vuelo completado' : bettingOpen ? `Apuestas abiertas · ${countdown}s` : 'Esperando la próxima salida'}</span><b>{round?.sequence ? `#${round.sequence}` : 'EN ESPERA'}</b></div>
+          <div className="bet-status-strip"><span className={`bet-status-light ${running || bettingOpen ? 'bet-status-light-live' : ''}`}/><span>{betOpen && bettingOpen ? `Apuesta lista · despega en ${formatCountdown(countdown)}` : running ? betOpen ? 'Vuelo activo · apuesta en juego' : 'Vuelo activo · apuestas cerradas' : round?.status === 'CRASHED' ? 'Vuelo completado' : bettingOpen ? `Apuestas abiertas · ${formatCountdown(countdown)}` : 'Esperando la próxima salida'}</span><b>{round?.sequence ? `#${round.sequence}` : 'EN ESPERA'}</b></div>
 
           <div className="wager-label"><label htmlFor="stake">Créditos para el vuelo</label><span>DISPONIBLE <b>{formatCredits(balance)} CR</b></span></div>
 
-          <div className="stake-input-wrap"><button className="stepper-button" aria-label="Restar 100 créditos" onClick={() => setStake(current => Math.max(100, current - 100))} disabled={stake <= 100 || betOpen}><Icon name="minus" size={16}/></button><input id="stake" className="stake-input" type="number" min="100" max={balance} step="100" value={stake} disabled={betOpen} onChange={event => setStake(Math.max(100, Number(event.target.value) || 100))}/><span className="stake-unit">CR</span><button className="stepper-button" aria-label="Sumar 100 créditos" onClick={() => setStake(current => Math.min(balance, current + 100))} disabled={stake >= balance || betOpen}><Icon name="plus" size={16}/></button></div>
+          <div className="stake-input-wrap"><button className="stepper-button" aria-label="Restar 1 crédito" onClick={() => setStake(current => Math.max(1, current - 1))} disabled={stake <= 1 || betOpen}><Icon name="minus" size={16}/></button><input id="stake" className="stake-input" type="number" min="1" max={Math.min(100000, balance)} step="0.01" value={stake} disabled={betOpen} onChange={event => setStake(Math.max(0, Number(event.target.value) || 0))}/><span className="stake-unit">CR</span><button className="stepper-button" aria-label="Sumar 1 crédito" onClick={() => setStake(current => Math.min(100000, balance, current + 1))} disabled={stake >= Math.min(100000, balance) || betOpen}><Icon name="plus" size={16}/></button></div>
 
-          <div className="quick-amounts" aria-label="Montos rápidos">{[500, 1000, 5000, 10000].map(value => <button key={value} className={`quick-amount ${stake === value ? 'quick-amount-selected' : ''}`} disabled={betOpen} onClick={() => setStake(Math.min(value, Math.max(100, balance)))}>{value >= 1000 ? `${value / 1000}k` : value}</button>)}</div>
+          <div className="wager-range-note">De 1 a 100.000 CR · También puedes escribir una cantidad exacta</div>
+
+          <div className="quick-amounts" aria-label="Montos rápidos">{[1, 10, 50, 100].map(value => <button key={value} className={`quick-amount ${stake === value ? 'quick-amount-selected' : ''}`} disabled={betOpen || balance < 1} onClick={() => setStake(Math.min(value, balance))}>{value}</button>)}</div>
 
           <div className="wager-summary"><span>APUESTA DE PRÁCTICA</span><b>{formatCredits(stake)} <small>CR</small></b></div>
 
-          {betOpen && running ? <button className="button button-cashout place-bet-button" onClick={cashout} disabled={busy}><span className="button-rocket"><Icon name="bolt" size={18}/></span><span>{busy ? 'Retirando…' : `Retirar a ${multiplier.toFixed(2)}×`}</span><span className="button-arrow">↗</span></button> : <button className="button button-primary place-bet-button" onClick={placeBet} disabled={!bettingOpen || betOpen || busy || stake > balance}><span className="button-rocket"><Icon name={betOpen ? 'check' : 'rocket'} size={18}/></span><span>{busy ? 'Confirmando…' : betOpen ? `Apuesta lista · ${countdown}s` : bettingOpen ? 'Confirmar apuesta' : running ? 'Apuestas cerradas' : 'Próximo despegue'}</span><span className="button-arrow">↗</span></button>}
+          {betOpen && running ? <button className="button button-cashout place-bet-button" onClick={cashout} disabled={busy}><span className="button-rocket"><Icon name="bolt" size={18}/></span><span>{busy ? 'Retirando…' : `Retirar a ${multiplier.toFixed(2)}×`}</span><span className="button-arrow">↗</span></button> : <button className="button button-primary place-bet-button" onClick={placeBet} disabled={!bettingOpen || betOpen || busy || stake < 1 || stake > Math.min(100000, balance)}><span className="button-rocket"><Icon name={betOpen ? 'check' : 'rocket'} size={18}/></span><span>{busy ? 'Confirmando…' : betOpen ? `Apuesta lista · ${formatCountdown(countdown)}` : bettingOpen ? 'Confirmar apuesta' : running ? 'Apuestas cerradas' : 'Próximo despegue'}</span><span className="button-arrow">↗</span></button>}
 
           {message && <div className={`game-message ${message.toLowerCase().includes('no se pudo') || message.toLowerCase().includes('inválid') ? 'game-message-error' : ''}`} role="status"><span className="message-icon"><Icon name={message.toLowerCase().includes('confirmad') || message.toLowerCase().includes('registr') ? 'check' : 'spark'} size={15}/></span>{message}</div>}
 
@@ -829,6 +1010,8 @@ export default function Home() {
 
 
     <footer className="game-footer"><span><span className="footer-brand-dot"/> SKYRUSH <i>·</i> SIMULADOR DE JUEGO CRASH</span><span>SOLO CRÉDITOS FICTICIOS <i>·</i> SIN VALOR MONETARIO</span><span>VUELOS PROCESADOS DE FORMA JUSTA <Icon name="shield" size={13}/></span></footer>
+
+    {refillOpen && <CreditRefillModal balance={balance} busy={accountBusy} error={refillMessage} onClose={() => setRefillOpen(false)} onSubmit={refillCredits}/>}
 
   </main>;
 
